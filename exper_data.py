@@ -139,8 +139,8 @@ class cal():
                             logg1[j,0]=round(np.emath.logn(10,ar[j,0]),2)
                             logg2[j,0]=round(np.emath.logn(10,ar[j,1]),2)
                         p0=[15,0.1,-5,0.1,-1]
-                        # fit2=op.least_squares(sigmoid,p0,args=(logtime[:,0],logg2))
-                        # fit2=op.curve_fit(self.sigmoid,logtime[:,0],logg2,absolute_sigma=True)
+                        fit2=op.least_squares(sigmoid,p0,args=(logtime[:,0],logg2))
+                        fit2=op.curve_fit(self.sigmoid,logtime[:,0],logg2,absolute_sigma=True)
 
 
         # return fit2
