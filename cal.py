@@ -6,6 +6,7 @@ print("平方和",np.sum( np.square(a) ))
 print("平均值",np.average(a))
 print("样本方差",np.var(a,ddof=1))
 print("总体方差",np.var(a,ddof=0))
+print("")
 
 
 
