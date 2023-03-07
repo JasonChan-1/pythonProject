@@ -11,11 +11,19 @@ def f_cm(x, k):
     a=x*np.emath.power(10,[k])[0]
     return a
 
-def sigmoid(p,x,y):
-    a5, alpha, beta, gamma, delta=p
+def model(p,x):
+    alpha, beta, gamma, delta,a5, a25 = p#5个参数
+    x=np.array(x)
+    # l=int(len(x))
+    x1,x2,x3=x[:16],x[16:-16],x[-16:]
+    sig=np.zeros_like(x)
+    sig[:16] = delta + alpha / (1 + np.exp(beta + gamma * (x1 - a5))) # x表示logtime
+    sig[16:-16] = x2
+    sig[-16:]= delta + alpha / (1 + np.exp(beta + gamma * (x3 - a25)))
+    return sig
 
-    return (y-delta-( alpha/(1+np.exp(beta+gamma*(x-a5) )) ))**2 #x表示logtime
-
+def object(p,x,y):
+    return model(p,x)-y
 
 class cal():
     def __init__(self,path):
@@ -122,31 +130,48 @@ class cal():
 
 
     def GR(self):
+        i=-1
+        plt.figure()
+        plt.xlabel(r"$Log(tr)$")
+        plt.ylabel(r"$Log(G')$")
+        marker = ['>', '*', 'v', 'x', '^', 'o', '+', '<', '>', '*', '^', 'o', '+', '<',
+                  'v', 'x', '^', 'o', '+', '<', '>', '*', '^', 'o', '+', '<',
+                  'v', 'x', '^', 'o', '+', '<', '>', '*', '^', 'o', '+', '<']
+        color = ['r','y','g','b','p','b','#e9963e', '#f23b27', '#65a9d7', '#304f9e',
+                 '#83639f','#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f',
+                 '#83639f', '#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f',
+                 '#83639f', '#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f'
+                 ]
+        # '#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f', '#ea7827', '#c22f2f', '#449945',
         for file in self.files:
             if re.search(r'\W', file.replace('.', '')) == None:
                 file_path = os.path.join(path, file)
                 for name in self.gr:
                     if name in pd.read_excel(file_path, sheet_name=None):
+                        i=i+1
                         df0 = pd.read_excel(file_path, sheet_name=name)
                         df = df0[['Storage modulus', 'Loss modulus', 'Angular frequency']][1:]
                         ar=df.values
-                        logtime=np.zeros([len(ar),1])
-                        logg1=np.zeros([len(ar),1])
-                        logg2=np.zeros([len(ar), 1])
+                        logtime,logg1,logg2=[],[],[]
                         for j in range(len(ar)):
                             time=2*math.pi/ar[j,2]
-                            logtime[j,0]=round(np.emath.logn(10,time),2)
-                            logg1[j,0]=round(np.emath.logn(10,ar[j,0]),2)
-                            logg2[j,0]=round(np.emath.logn(10,ar[j,1]),2)
-                        p0=[15,0.1,-5,0.1,-1]
-                        fit2=op.least_squares(sigmoid,p0,args=(logtime[:,0],logg2))
-                        fit2=op.curve_fit(self.sigmoid,logtime[:,0],logg2,absolute_sigma=True)
+                            logtime.append(np.emath.logn(10,time))
+                            logg1.append(np.emath.logn(10,ar[j,0]))
+                            logg2.append(np.emath.logn(10,ar[j,1]))
+                        logtime,logg1,logg2=np.array(logtime),np.array(logg1),np.array(logg2)
+                        p0=[15,0.1,0,0.1,-1,-1.23]
+                        fit1=op.least_squares(object,p0,args=(logtime,logg1),method='lm',
+                                              verbose=0)['x']
+                        fit2=op.least_squares(object,p0,args=(logtime,logg2),method='lm',
+                                              verbose=0)['x']
+                        #  依次是alpha, beta, gamma, delta,a5
 
 
-        # return fit2
+
+        return fit1
 
 
 
-path='D:\Desktop\研一\课题组\原始数据'
-res=cal(path).rf()
+path='/Users/jasonchan/Desktop/process'
+res=cal(path).GR()
 print(res)
