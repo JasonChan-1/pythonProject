@@ -5,25 +5,15 @@ import re
 import matplotlib.pyplot as plt
 from scipy import optimize as op
 import math
+from sko.SA import SABoltzmann
 
 
 def f_cm(x, k):
     a=x*np.emath.power(10,[k])[0]
     return a
 
-def model(p,x):
-    alpha, beta, gamma, delta,a5, a25 = p#5个参数
-    x=np.array(x)
-    # l=int(len(x))
-    x1,x2,x3=x[:16],x[16:-16],x[-16:]
-    sig=np.zeros_like(x)
-    sig[:16] = delta + alpha / (1 + np.exp(beta + gamma * (x1 - a5))) # x表示logtime
-    sig[16:-16] = x2
-    sig[-16:]= delta + alpha / (1 + np.exp(beta + gamma * (x3 - a25)))
-    return sig
 
-def object(p,x,y):
-    return model(p,x)-y
+
 
 class cal():
     def __init__(self,path):
@@ -65,7 +55,7 @@ class cal():
         marker=['>','*','^','o','+','<','>','*','^','o','+','<']
         color=['#e9963e','#f23b27', '#65a9d7', '#304f9e','#83639f','#ea7827','#c22f2f','#449945'
                '#e9963e', '#f23b27', '#65a9d7','#304f9e', '#83639f', '#ea7827', '#c22f2f', '#449945']
-        k=[[0.7,-0.7],[0.65,-0.65],[0.7,-0.7],[0.7,-0.7],[0.85,-0.9],[0.8,-0.8],[0.85,-0.9],[0.85, -0.9],
+        k=[[0.7,-0.7],[0.65,-0.65],[0.7,-0.7],[0.7,-0.7],[0.83,-0.9],[0.80,-0.8],[0.85,-0.9],[0.85, -0.9],
            [0.85, -0.9], [0.8, -0.8], [0.85, -0.9], [0.85, -0.9], [0.85, -0.9], [0.85, -0.9],]  #调参
         self.graph()
         for file in self.files:
@@ -130,48 +120,58 @@ class cal():
 
 
     def GR(self):
-        i=-1
-        plt.figure()
-        plt.xlabel(r"$Log(tr)$")
-        plt.ylabel(r"$Log(G')$")
-        marker = ['>', '*', 'v', 'x', '^', 'o', '+', '<', '>', '*', '^', 'o', '+', '<',
-                  'v', 'x', '^', 'o', '+', '<', '>', '*', '^', 'o', '+', '<',
-                  'v', 'x', '^', 'o', '+', '<', '>', '*', '^', 'o', '+', '<']
-        color = ['r','y','g','b','p','b','#e9963e', '#f23b27', '#65a9d7', '#304f9e',
-                 '#83639f','#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f',
-                 '#83639f', '#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f',
-                 '#83639f', '#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f'
-                 ]
-        # '#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f', '#ea7827', '#c22f2f', '#449945',
         for file in self.files:
             if re.search(r'\W', file.replace('.', '')) == None:
                 file_path = os.path.join(path, file)
                 for name in self.gr:
                     if name in pd.read_excel(file_path, sheet_name=None):
-                        i=i+1
                         df0 = pd.read_excel(file_path, sheet_name=name)
                         df = df0[['Storage modulus', 'Loss modulus', 'Angular frequency']][1:]
                         ar=df.values
-                        logtime,logg1,logg2=[],[],[]
+                        logtime=np.zeros([len(ar),1])
+                        logg1=np.zeros([len(ar),1])
+                        logg2=np.zeros([len(ar), 1])
+                        log111=[]
+                        log222=[]
                         for j in range(len(ar)):
                             time=2*math.pi/ar[j,2]
-                            logtime.append(np.emath.logn(10,time))
-                            logg1.append(np.emath.logn(10,ar[j,0]))
-                            logg2.append(np.emath.logn(10,ar[j,1]))
-                        logtime,logg1,logg2=np.array(logtime),np.array(logg1),np.array(logg2)
-                        p0=[15,0.1,0,0.1,-1,-1.23]
-                        fit1=op.least_squares(object,p0,args=(logtime,logg1),method='lm',
-                                              verbose=0)['x']
-                        fit2=op.least_squares(object,p0,args=(logtime,logg2),method='lm',
-                                              verbose=0)['x']
-                        #  依次是alpha, beta, gamma, delta,a5
+                            logtime[j,0]=round(np.emath.logn(10,time),2)
+                            logg1[j,0]=round(np.emath.logn(10,ar[j,0]),2)
+                            logg2[j,0]=round(np.emath.logn(10,ar[j,1]),2)
+                            log111.append( logtime[j,0])
+                            log222.append(logg1[j,0])
+
+                        # logtime=logtime.reshape(1,logtime.size)
+                        # logg1 =logg1.reshape(1,logg1.size)[0]
+                        # logg2 = logg2.reshape(1, logg2.size)[0]
+                        # X=np.concatenate([logtime,logg1],axis=0)
+                        logtime=np.array(logtime)
+
+                        # fit2=op.least_squares(sigmoid,p0,args=(logtime[:,0],logg2))
+                        # fit2=op.curve_fit(self.sigmoid,logtime[:,0],logg2,absolute_sigma=True)
+        #,log222
+
+        return log111,log222
+
+    def sigmoid(self,p):
+        alpha, beta, gamma, delta, a5, a25 = p
+        # alpha, beta, gamma, delta, a5, a25 = p[0],p[1],p[2],p[3],p[4],p[5]
+        x,y=np.array(self.GR()[0]),np.array(self.GR()[1])
+        x1=x[:16];x2=x[:16];x3=x[:16]
+        y1 = y[:16];y2=y[:16];y3=y[:16];
+        y0 = sum((y1 - delta + (alpha / (1 + np.exp(beta + gamma * (x1 - a5))))) ** 2 +
+                 (y2 - delta + (alpha / (1 + np.exp(beta + gamma * x2)))) ** 2 +
+                 (y3 - delta + (alpha / (1 + np.exp(beta + gamma * (x3 - a25))))) ** 2)
+        return y0  # x表示logtime
+
+    def sacal(self):
+        p0 = [15, 0.1, -5, 0.1, -1,1]
+        sa = SABoltzmann(func=self.sigmoid, x0=p0, T_max=1, T_min=1e-9, q=0.99, L=300, max_stay_counter=150)
+        best_x, best_y = sa.run()
+        return best_x,best_y
 
 
-
-        return fit1
-
-
-
-path='/Users/jasonchan/Desktop/process'
-res=cal(path).GR()
+p0 = [15, 0.1, -5, 0.1, -1,1]
+path='D:\Desktop\研一\课题组\原始数据'
+res=cal(path).sacal()
 print(res)
