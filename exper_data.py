@@ -7,10 +7,50 @@ from scipy import optimize as op
 import math
 from sko.SA import SABoltzmann
 
+def progsol(p,x,y):
+    alpha, beta, gamma, delta, a5, a25 = p
+    x,y=np.array(x),np.array(y)
+    x1=x[:16];x2=x[:16];x3=x[:16]
+    y1 =y[:16];y2=y[:16];y3=y[:16]
+    y0 = sum(((delta + alpha / (1 + np.exp(beta + gamma * (x1 - a5))))-y1) ** 2+(( delta +alpha / (1 + np.exp(beta + gamma * x2)))-y2) ** 2+(( delta + alpha / (1 + np.exp(beta + gamma * (x3 - a25))))-y3) ** 2)
+    return y0  # x表示logtime
 
-def f_cm(x, k):
-    a=x*np.emath.power(10,[k])[0]
-    return a
+def predic(p,x):
+    alpha, beta, gamma, delta, a5, a25 = p
+    x=np.array(x)
+    y = np.zeros_like(x)
+    x1 = x[:16];x2 = x[16:-16];x3 = x[-16:]
+    y[:16]=delta + alpha / (1 + np.exp(beta + gamma * (x1 - a5)))
+    y[16:-16]= delta +alpha / (1 + np.exp(beta + gamma * x2))
+    y[-16:]= delta + alpha / (1 + np.exp(beta + gamma * (x3 - a25)))
+    return y
+
+def cmg(p):
+    alpha, beta, gamma, delta = p
+    logg=delta + alpha / (1 + np.exp(beta + gamma * np.emath.logn(10,[np.pi*2/0.005])))
+    return logg
+
+
+class scip():
+    def __init__(self,xdata,ydata):
+        self.xdata=xdata
+        self.ydata=ydata
+
+    def fun(self,p,x,y):
+        alpha, beta, gamma, delta, a5, a25 = p
+        x=self.xdata; y=self.ydata
+        x, y = np.array(x), np.array(y)
+        x1 = x[:16];x2 = x[:16];x3 = x[:16]
+        y1 = y[:16];y2 = y[:16];y3 = y[:16]
+        y0 = sum(((delta + alpha / (1 + np.exp(beta + gamma * (x1 - a5)))) - y1) ** 2 + (
+                    (delta + alpha / (1 + np.exp(beta + gamma * x2))) - y2) ** 2 + (
+                             (delta + alpha / (1 + np.exp(beta + gamma * (x3 - a25)))) - y3) ** 2)
+        return y0
+
+    def cal(self):
+        bound=[-100,100]*6
+        res=op.dual_annealing(self.fun,bounds=bound,args=(self.xdata,self.ydata))
+        return res
 
 
 
@@ -19,6 +59,7 @@ class cal():
     def __init__(self,path):
         self.files=os.listdir(path)
         self.sheets_name=[]
+        self.path=path
         for file in self.files:
             if re.search(r'\W', file.replace('.', '')) == None:
                 file_path=os.path.join(path,file)
@@ -88,6 +129,7 @@ class cal():
                                     alpha=0.8)
                         plt.legend()
         plt.show()
+
     # 车辙因子
     def rf(self):
         i=-1
@@ -116,10 +158,11 @@ class cal():
                                  marker=marker[i], color=color[i],mec=color[i+6],mfc='none',ms=8)
                         plt.legend()
         plt.show()
+
     # GR参数
-
-
     def GR(self):
+        plt.figure()
+        r00=[]
         for file in self.files:
             if re.search(r'\W', file.replace('.', '')) == None:
                 file_path = os.path.join(path, file)
@@ -131,47 +174,54 @@ class cal():
                         logtime=np.zeros([len(ar),1])
                         logg1=np.zeros([len(ar),1])
                         logg2=np.zeros([len(ar), 1])
-                        log111=[]
-                        log222=[]
                         for j in range(len(ar)):
                             time=2*math.pi/ar[j,2]
-                            logtime[j,0]=round(np.emath.logn(10,time),2)
-                            logg1[j,0]=round(np.emath.logn(10,ar[j,0]),2)
-                            logg2[j,0]=round(np.emath.logn(10,ar[j,1]),2)
-                            log111.append( logtime[j,0])
-                            log222.append(logg1[j,0])
+                            logtime[j,0]=np.emath.logn(10,time)
+                            logg1[j,0]=np.emath.logn(10,ar[j,0])
+                            logg2[j,0]=np.emath.logn(10,ar[j,1])
+                        # 共轭梯度局解
+                        p0 = [1]*6
+                        fit1 = op.minimize(progsol, p0, args=(logtime, logg1), method='CG',tol=1e-12)
+                        fit2 = op.minimize(progsol, p0, args=(logtime, logg2), method='CG')
+                        ''''''
+                        # 双重退火全解
+                        # p0=[1]*6
+                        # bound = [[-25, 25]] * 6
+                        # fit1=op.dual_annealing(progsol,args=(logtime,logg1),bounds=bound)
+                        # fit2=op.dual_annealing(progsol,args=(logtime,logg2),bounds=bound)
 
-                        # logtime=logtime.reshape(1,logtime.size)
-                        # logg1 =logg1.reshape(1,logg1.size)[0]
-                        # logg2 = logg2.reshape(1, logg2.size)[0]
-                        # X=np.concatenate([logtime,logg1],axis=0)
-                        logtime=np.array(logtime)
+                        p1=fit1.x;prec1=fit1.fun
+                        p2=fit2.x;prec2=fit2.fun
+                        # 计算各指标
+                        logG1=cmg(p1[:4]);logG2=cmg(p2[:4])
+                        G=np.sqrt( np.exp(10,logG1)**2+np.exp(10,logG2)**2 )
+                        Delta=np.arctan(np.exp(10,logG2)/np.exp(10,logG1))
+                        GR=G*(np.cos(Delta))**2/np.sin(Delta)/10e3
+                        r00.append([name[:-3],p1,p2,prec1,prec2,logG1,logG2,G,Delta,GR])
+                        # 预测与实际拟合情况
+                        predy1=predic(p1,logtime)
+                        predy2 = predic(p2, logtime)
+                        '''
+                        x1=np.zeros_like(logtime)
+                        x1[:16]=logtime[:16]-p1[4];x1[16:-16]=logtime[16:-16];x1[-16:]=logtime[-16:]-p1[5]
+                        plt.scatter(x=x1,y=predy,label=name[:-3]+'fit',marker='*')
+                        plt.scatter(x=x1,y=logg1,label=name[:-3]+'origin',marker='^')
+                        plt.legend()
+                        plt.show()
+                        #   结果顺序：alpha, beta, gamma, delta, a5, a25
+                        '''
+        # 输出
+        r0=np.concatenate([logg1,predy1,logg2,predy2],axis=1)
+        # r0=np.concatenate([p1,p2,logG1,logG2,G,Delta,GR],axis=0)
+        # print(r0)
+        return r0
+        # r00=np.array(r00)
+        # df1=pd.DataFrame(data=r00,columns=['name','p1','p2','prec1','prec2','logG1','logG2','G','Delta','GR'])
+        # df1.to_excel('D:\Desktop\研一\课题组\原始数据\GRres.xlsx',sheet_name='res',index=False )
+        # return r0
 
-                        # fit2=op.least_squares(sigmoid,p0,args=(logtime[:,0],logg2))
-                        # fit2=op.curve_fit(self.sigmoid,logtime[:,0],logg2,absolute_sigma=True)
-        #,log222
-
-        return log111,log222
-
-    def sigmoid(self,p):
-        alpha, beta, gamma, delta, a5, a25 = p
-        # alpha, beta, gamma, delta, a5, a25 = p[0],p[1],p[2],p[3],p[4],p[5]
-        x,y=np.array(self.GR()[0]),np.array(self.GR()[1])
-        x1=x[:16];x2=x[:16];x3=x[:16]
-        y1 = y[:16];y2=y[:16];y3=y[:16];
-        y0 = sum((y1 - delta + (alpha / (1 + np.exp(beta + gamma * (x1 - a5))))) ** 2 +
-                 (y2 - delta + (alpha / (1 + np.exp(beta + gamma * x2)))) ** 2 +
-                 (y3 - delta + (alpha / (1 + np.exp(beta + gamma * (x3 - a25))))) ** 2)
-        return y0  # x表示logtime
-
-    def sacal(self):
-        p0 = [15, 0.1, -5, 0.1, -1,1]
-        sa = SABoltzmann(func=self.sigmoid, x0=p0, T_max=1, T_min=1e-9, q=0.99, L=300, max_stay_counter=150)
-        best_x, best_y = sa.run()
-        return best_x,best_y
 
 
-p0 = [15, 0.1, -5, 0.1, -1,1]
 path='D:\Desktop\研一\课题组\原始数据'
-res=cal(path).sacal()
+res=cal(path).GR()
 print(res)
