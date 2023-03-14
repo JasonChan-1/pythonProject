@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy import optimize as op
 import math
 from sko.SA import SABoltzmann
-
+    #GR参数计算函数
 def progsol(p,x,y):
     alpha, beta, gamma, delta, a5, a25 = p
     x,y=np.array(x),np.array(y)
@@ -25,36 +25,33 @@ def predic(p,x):
     y[-16:]= delta + alpha / (1 + np.exp(beta + gamma * (x3 - a25)))
     return y
 
-def cmg(p):
+def grg(p):
     alpha, beta, gamma, delta = p
     logg=delta + alpha / (1 + np.exp(beta + gamma * np.emath.logn(10,[np.pi*2/0.005])))
     return logg
 
+    #复数模量计算函数
+def cml(p,x,y):
+    alpha, beta = p
+    x, y = np.array(x), np.array(y)
+    x0 = np.zeros_like(x)
+    x1 = x[:13];x2 = x[13:-13];x3 = x[-13:]
+    x0[:13] = x1*10**alpha
+    x0[13:-13] = x2
+    x0[-13:] = x3*10**(-beta)
+    y0=y*1e-3
+    return x0,y0
 
-class scip():
-    def __init__(self,xdata,ydata):
-        self.xdata=xdata
-        self.ydata=ydata
+def cmfun(p,x,y):
+    alpha,beta,a,b=p
+    x,y=np.array(x),np.array(y)
+    x0=np.zeros_like(x)
+    x1 = x[:13];x2 = x[13:-13];x3 = x[-13:]
+    x0[:13]=np.log10(x1)+alpha;x0[13:-13]=np.log10(x2);x0[-13:]=np.log10(x3)-beta
+    y0=np.log10(y*1e-3)
+    return sum((a*x0+b-y0)**2)
 
-    def fun(self,p,x,y):
-        alpha, beta, gamma, delta, a5, a25 = p
-        x=self.xdata; y=self.ydata
-        x, y = np.array(x), np.array(y)
-        x1 = x[:16];x2 = x[:16];x3 = x[:16]
-        y1 = y[:16];y2 = y[:16];y3 = y[:16]
-        y0 = sum(((delta + alpha / (1 + np.exp(beta + gamma * (x1 - a5)))) - y1) ** 2 + (
-                    (delta + alpha / (1 + np.exp(beta + gamma * x2))) - y2) ** 2 + (
-                             (delta + alpha / (1 + np.exp(beta + gamma * (x3 - a25)))) - y3) ** 2)
-        return y0
-
-    def cal(self):
-        bound=[-100,100]*6
-        res=op.dual_annealing(self.fun,bounds=bound,args=(self.xdata,self.ydata))
-        return res
-
-
-
-
+#计算主类
 class cal():
     def __init__(self,path):
         self.files=os.listdir(path)
@@ -93,9 +90,8 @@ class cal():
 
     def cm(self):
         i = -1
-        marker=['>','*','^','o','+','<','>','*','^','o','+','<']
-        color=['#e9963e','#f23b27', '#65a9d7', '#304f9e','#83639f','#ea7827','#c22f2f','#449945'
-               '#e9963e', '#f23b27', '#65a9d7','#304f9e', '#83639f', '#ea7827', '#c22f2f', '#449945']
+        marker=['>','*','^','o','+','1','s','p','h']
+        color=['#e9963e','#f23b27', '#65a9d7', '#304f9e','#83639f','#ea7827','#c22f2f','#449945']
         k=[[0.7,-0.7],[0.65,-0.65],[0.7,-0.7],[0.7,-0.7],[0.83,-0.9],[0.80,-0.8],[0.85,-0.9],[0.85, -0.9],
            [0.85, -0.9], [0.8, -0.8], [0.85, -0.9], [0.85, -0.9], [0.85, -0.9], [0.85, -0.9],]  #调参
         self.graph()
@@ -105,30 +101,19 @@ class cal():
                 for fushu_name in self.fushu:
                     if fushu_name in pd.read_excel(file_path, sheet_name=None):
                         i = i + 1
-                        df_fushu = pd.read_excel(file_path, sheet_name=fushu_name)
-                        ar_fushu = df_fushu[['Temperature', 'Angular frequency', 'Complex modulus']][1:].values
-                        ar_fushu[:, 2] = ar_fushu[:, 2] / 1e3
-                        ar35 = []; ar45 = []; ar55 = []
-                        for row in ar_fushu:
-                            if round(row[0]) == 35:
-                                ar35.append(row[-2:])
-                            elif round(row[0]) == 45:
-                                ar45.append(row[-2:])
-                            elif round(row[0]) == 55:
-                                ar55.append(row[-2:])
-                        ar35 = np.array(ar35)
-                        ar45 = np.array(ar45)
-                        ar55 = np.array(ar55)
-                        for j in range(len(ar35)):
-                            ar35[j, 0] = f_cm(ar35[j, 0], k=k[i][0])
-                        for j in range(len(ar55)):
-                            ar55[j, 0] = f_cm(ar55[j, 0], k=k[i][1])
-                        arr = np.concatenate((ar35, ar45, ar55), axis=0)
-                        plt.scatter(x=arr[:, 0], y=arr[:, 1],
-                                    label=fushu_name[:-5], marker=marker[i], color=color[i],
-                                    alpha=0.8)
+                        df_fushu = pd.read_excel(file_path, sheet_name=fushu_name)          #读取表格
+                        df_fushu=df_fushu[['Angular frequency', 'Complex modulus']][1:]     #提取角频率和复数模量
+                        ar_fushu=pd.DataFrame(df_fushu,dtype=float).values                  #数据转为float
+                        p0=[1]*4    #设置初始值,alpha,beta,a,b
+                        res=op.least_squares(cmfun,p0,args=(ar_fushu[:,0],ar_fushu[:,1]))   #最小二乘法拟合
+                        fit=res.x[:2]
+                        x,y=cml(fit,ar_fushu[:,0],ar_fushu[:,1])
+                        print("拟合值是：\n{}\n".format(fit))
+                        # arr = np.concatenate((ar35, ar45, ar55), axis=0)
+                        plt.scatter(x=x,y=y,label=fushu_name[:-5],marker=marker[i],alpha=0.8)
                         plt.legend()
         plt.show()
+        # return fit
 
     # 车辙因子
     def rf(self):
@@ -139,10 +124,8 @@ class cal():
         plt.tick_params(direction='in', axis='both',length=8,width=1)
         plt.xlabel(r'$T(℃)kPa$')
         plt.ylabel(r'$G*/sin\delta$')
-        marker = ['>', '*','v','x','^', 'o', '+', '<', '>', '*', '^', 'o', '+', '<']
-        color = ['#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f',
-                 '#ea7827', '#c22f2f', '#449945','#e9963e', '#f23b27',
-                 '#65a9d7', '#304f9e', '#83639f', '#ea7827', '#c22f2f', '#449945']
+        marker=['>','*','^','o','+','1','s','p','h','>','*','^','o','+','1','s','p','h']
+        color = ['#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f','#ea7827', '#c22f2f', '#449945']
         for file in self.files:
             if re.search(r'\W', file.replace('.', '')) == None:
                 file_path = os.path.join(path, file)
@@ -162,7 +145,6 @@ class cal():
     # GR参数
     def GR(self):
         plt.figure()
-        r00=[]
         for file in self.files:
             if re.search(r'\W', file.replace('.', '')) == None:
                 file_path = os.path.join(path, file)
@@ -180,24 +162,32 @@ class cal():
                             logg1[j,0]=np.emath.logn(10,ar[j,0])
                             logg2[j,0]=np.emath.logn(10,ar[j,1])
                         # 共轭梯度局解
-                        p0 = [1]*6
-                        fit1 = op.minimize(progsol, p0, args=(logtime, logg1), method='CG',tol=1e-12)
-                        fit2 = op.minimize(progsol, p0, args=(logtime, logg2), method='CG')
+                        # p0 = [1]*6
+                        # fit1 = op.minimize(progsol, p0, args=(logtime, logg1), method='CG')
+                        # fit2 = op.minimize(progsol, p0, args=(logtime, logg2), method='CG')
                         ''''''
                         # 双重退火全解
-                        # p0=[1]*6
-                        # bound = [[-25, 25]] * 6
-                        # fit1=op.dual_annealing(progsol,args=(logtime,logg1),bounds=bound)
-                        # fit2=op.dual_annealing(progsol,args=(logtime,logg2),bounds=bound)
+                        p0=[1]*6
+                        bound = [[-25, 25]] * 6
+                        fit1=op.dual_annealing(progsol,args=(logtime,logg1),bounds=bound)
+                        fit2=op.dual_annealing(progsol,args=(logtime,logg2),bounds=bound)
 
                         p1=fit1.x;prec1=fit1.fun
                         p2=fit2.x;prec2=fit2.fun
                         # 计算各指标
-                        logG1=cmg(p1[:4]);logG2=cmg(p2[:4])
+                        alpha, beta, gamma, delta = p1[:4]
+                        logG1=delta + alpha / (1 + np.exp(beta + gamma * np.emath.logn(10, [np.pi * 2 / 0.005])))
+                        alpha, beta, gamma, delta = p2[:4]
+                        logG2 = delta + alpha / (1 + np.exp(beta + gamma * np.emath.logn(10, [np.pi * 2 / 0.005])))
                         G=np.sqrt( np.exp(10,logG1)**2+np.exp(10,logG2)**2 )
                         Delta=np.arctan(np.exp(10,logG2)/np.exp(10,logG1))
-                        GR=G*(np.cos(Delta))**2/np.sin(Delta)/10e3
-                        r00.append([name[:-3],p1,p2,prec1,prec2,logG1,logG2,G,Delta,GR])
+                        GR=G/10e3*(np.cos(Delta))**2/np.sin(Delta)
+                        # print("\n{}\n{}\nGR参数是{}\n".format(p1, p2,GR))
+                        print("{}的G1和G2的规划值alpha,beta,gamma,delta,a5,a25和求和值分别是\n{},{}\n{},{}".format(name[:-3],p1,prec1,p2,prec2))
+                        print("logg1和logg2分别是 {},{}".format(logG1, logG2))
+                        print("复数模量和Delta分别是 {}".format(G,Delta))
+                        print("GR参数 {}".format(GR))
+
                         # 预测与实际拟合情况
                         predy1=predic(p1,logtime)
                         predy2 = predic(p2, logtime)
@@ -211,17 +201,18 @@ class cal():
                         #   结果顺序：alpha, beta, gamma, delta, a5, a25
                         '''
         # 输出
-        r0=np.concatenate([logg1,predy1,logg2,predy2],axis=1)
+                        r0=np.concatenate([logg1,predy1,logg2,predy2],axis=1)
         # r0=np.concatenate([p1,p2,logG1,logG2,G,Delta,GR],axis=0)
-        # print(r0)
-        return r0
+                        print("真实值和预测值拟合效果对比\n{}\n".format(r0))
+
         # r00=np.array(r00)
         # df1=pd.DataFrame(data=r00,columns=['name','p1','p2','prec1','prec2','logG1','logG2','G','Delta','GR'])
         # df1.to_excel('D:\Desktop\研一\课题组\原始数据\GRres.xlsx',sheet_name='res',index=False )
         # return r0
 
+    #
 
 
-path='D:\Desktop\研一\课题组\原始数据'
+path='/Users/jasonchan/Desktop/process'
 res=cal(path).GR()
 print(res)
