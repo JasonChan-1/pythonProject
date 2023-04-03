@@ -1,0 +1,31 @@
+\documentclass{article}
+\usepackage[a4paper,top=2.54cm,bottom=2.54cm,left=3.2cm,right=3.2cm]{geometry}
+\usepackage{amsfonts,amsmath,amssymb}
+\usepackage{xeCJK,ulem,indentfirst,zhnumber}
+\newCJKfontfamily{\hei}{FandolHei}
+\newCJKfontfamily{\song}{FandolSong}
+\setmainfont{Times New Roman}
+\setCJKmainfont{FandolSong}
+
+\usepackage{setspace}
+\fontsize{12pt}{15.6pt} %normalsize为五号，baselineskip同word 1.3倍
+\linespread{2} %一倍行距15.6pt，两倍行距
+\setlength{\parindent}{2em} %首行缩进2字符
+\addtolength{\parskip}{0pt} %段间距同行距
+%\setlength{\baselinestretch}{1.5}%1.5倍行距
+
+\usepackage{titlesec}
+\titleformat{\section}
+[block]{\Large\hei}{第 \zhnum{section} 节}{0em}{\ }
+\titlespacing{\section}{0em}{0pt}{0pt} %标题前后间距为一倍行距
+
+\usepackage{enumitem}
+\setlist{topsep=0pt,itemsep=0pt,parsep=0pt,left=35pt}
+\setlist[enumerate]{label=$(\arabic*).$}
+\setlist[itemize]{label=$\textasteriskcentered$}
+
+
+\begin{document}
+Hello,\LaTeX
+
+\end{document}
