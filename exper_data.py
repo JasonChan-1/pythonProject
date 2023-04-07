@@ -5,16 +5,8 @@ import re
 import matplotlib.pyplot as plt
 from scipy import optimize as op
 import math
-from sko.SA import SABoltzmann
-    #GR参数计算函数
-def progsol(p,x,y):
-    alpha, beta, gamma, delta, a5, a25 = p
-    x,y=np.array(x),np.array(y)
-    x1=x[:16];x2=x[:16];x3=x[:16]
-    y1 =y[:16];y2=y[:16];y3=y[:16]
-    y0 = sum(((delta + alpha / (1 + np.exp(beta + gamma * (x1 - a5))))-y1) ** 2+(( delta +alpha / (1 + np.exp(beta + gamma * x2)))-y2) ** 2+(( delta + alpha / (1 + np.exp(beta + gamma * (x3 - a25))))-y3) ** 2)
-    return y0  # x表示logtime
 
+    #GR参数计算函数
 def predic(p,x):
     alpha, beta, gamma, delta, a5, a25 = p
     x=np.array(x)
@@ -23,12 +15,16 @@ def predic(p,x):
     y[:16]=delta + alpha / (1 + np.exp(beta + gamma * (x1 - a5)))
     y[16:-16]= delta +alpha / (1 + np.exp(beta + gamma * x2))
     y[-16:]= delta + alpha / (1 + np.exp(beta + gamma * (x3 - a25)))
-    return y
+    return y # x表示logtime
 
-def grg(p):
+def progsol(p, x, y):
+    y0 = sum((predic(p, x)[:16] - y[:16]) ** 2 + (predic(p, x)[16:-16] - y[16:-16]) ** 2 + (predic(p, x)[-16:] - y[-16:]) ** 2)
+    return y0
+
+def logG(p):
     alpha, beta, gamma, delta = p
-    logg=delta + alpha / (1 + np.exp(beta + gamma * np.emath.logn(10,[np.pi*2/0.005])))
-    return logg
+    logG = delta + alpha / (1 + np.exp(beta + gamma * np.log10([np.pi * 2 / 0.005])))
+    return logG
 
     #复数模量计算函数
 def cml(p,x,y):
@@ -58,8 +54,8 @@ class cal():
         self.sheets_name=[]
         self.path=path
         for file in self.files:
-            if re.search(r'\W', file.replace('.', '')) == None:
-                file_path=os.path.join(path,file)
+            if re.search(r'^\w', file) != None:
+                file_path = os.path.join(path, file)
                 sheets=pd.read_excel(file_path,sheet_name=None)
                 for sheet in sheets:
                     self.sheets_name.append(sheet)
@@ -96,7 +92,7 @@ class cal():
            [0.85, -0.9], [0.8, -0.8], [0.85, -0.9], [0.85, -0.9], [0.85, -0.9], [0.85, -0.9],]  #调参
         self.graph()
         for file in self.files:
-            if re.search(r'\W', file.replace('.', '')) == None:
+            if re.search(r'^\w', file) != None:
                 file_path = os.path.join(path, file)
                 for fushu_name in self.fushu:
                     if fushu_name in pd.read_excel(file_path, sheet_name=None):
@@ -118,7 +114,6 @@ class cal():
     # 车辙因子
     def rf(self):
         i=-1
-        plt.figure(figsize=(5,5))
         plt.xticks(np.arange(0,100,10))
         plt.yticks(np.arange(0,200,50))
         plt.tick_params(direction='in', axis='both',length=8,width=1)
@@ -127,7 +122,7 @@ class cal():
         marker=['>','*','^','o','+','1','s','p','h','>','*','^','o','+','1','s','p','h']
         color = ['#e9963e', '#f23b27', '#65a9d7', '#304f9e', '#83639f','#ea7827', '#c22f2f', '#449945']
         for file in self.files:
-            if re.search(r'\W', file.replace('.', '')) == None:
+            if re.search(r'^\w', file) != None:
                 file_path = os.path.join(path, file)
                 for name in self.che:
                     if name in pd.read_excel(file_path, sheet_name=None):
@@ -138,19 +133,20 @@ class cal():
                         for j in range(len(ar)):
                             ar[j,1]=ar[j,2]/(np.sin(ar[j,1]/180*np.pi))
                         plt.plot(ar[:,0],ar[:,1],label=name[:-3],lw=1.5,
-                                 marker=marker[i], color=color[i],mec=color[i+6],mfc='none',ms=8)
+                                 marker='*', color=color[i],mec=color[i],mfc='none',ms=5)
                         plt.legend()
         plt.show()
 
     # GR参数
     def GR(self):
-        plt.figure()
+        arr=[]
         for file in self.files:
-            if re.search(r'\W', file.replace('.', '')) == None:
+            if re.search(r'^\w', file) != None:
                 file_path = os.path.join(path, file)
                 for name in self.gr:
                     if name in pd.read_excel(file_path, sheet_name=None):
                         df0 = pd.read_excel(file_path, sheet_name=name)
+                        print('正在处理{}'.format(name))
                         df = df0[['Storage modulus', 'Loss modulus', 'Angular frequency']][1:]
                         ar=df.values
                         logtime=np.zeros([len(ar),1])
@@ -166,53 +162,25 @@ class cal():
                         # fit1 = op.minimize(progsol, p0, args=(logtime, logg1), method='CG')
                         # fit2 = op.minimize(progsol, p0, args=(logtime, logg2), method='CG')
                         ''''''
-                        # 双重退火全解
-                        p0=[1]*6
-                        bound = [[-25, 25]] * 6
-                        fit1=op.dual_annealing(progsol,args=(logtime,logg1),bounds=bound)
-                        fit2=op.dual_annealing(progsol,args=(logtime,logg2),bounds=bound)
-
-                        p1=fit1.x;prec1=fit1.fun
-                        p2=fit2.x;prec2=fit2.fun
+                        bound = [[-20, 20]] * 6
+                        iter=2000
+                        fit1 = op.dual_annealing(progsol, args=(logtime, logg1), bounds=bound,maxiter=iter)
+                        fit2 = op.dual_annealing(progsol, args=(logtime, logg2), bounds=bound,maxiter=iter)
+                        # rt = np.zeros_like(logtime)
+                        print(fit1)
+                        print(fit2)
+                        p1 = fit1.x; prec1 = fit1.fun
+                        p2 = fit2.x; prec2 = fit2.fun
                         # 计算各指标
-                        alpha, beta, gamma, delta = p1[:4]
-                        logG1=delta + alpha / (1 + np.exp(beta + gamma * np.emath.logn(10, [np.pi * 2 / 0.005])))
-                        alpha, beta, gamma, delta = p2[:4]
-                        logG2 = delta + alpha / (1 + np.exp(beta + gamma * np.emath.logn(10, [np.pi * 2 / 0.005])))
-                        G=np.sqrt( np.exp(10,logG1)**2+np.exp(10,logG2)**2 )
-                        Delta=np.arctan(np.exp(10,logG2)/np.exp(10,logG1))
-                        GR=G/10e3*(np.cos(Delta))**2/np.sin(Delta)
-                        # print("\n{}\n{}\nGR参数是{}\n".format(p1, p2,GR))
-                        print("{}的G1和G2的规划值alpha,beta,gamma,delta,a5,a25和求和值分别是\n{},{}\n{},{}".format(name[:-3],p1,prec1,p2,prec2))
-                        print("logg1和logg2分别是 {},{}".format(logG1, logG2))
-                        print("复数模量和Delta分别是 {}".format(G,Delta))
-                        print("GR参数 {}".format(GR))
+                        G = np.sqrt((10 ** logG(p1[:4])) ** 2 + (10 ** logG(p2[:4])) ** 2)
+                        Delta = np.arctan((10 ** logG(p2[:4])) / (10 ** logG(p1[:4])))
+                        GR = G / 1e3 * (np.cos(Delta)) ** 2 / np.sin(Delta)
+                        arr.append([name[:-2],p1,prec1,p2,prec2,logG(p1[:4]),logG(p2[:4]),G,Delta,GR])
 
-                        # 预测与实际拟合情况
-                        predy1=predic(p1,logtime)
-                        predy2 = predic(p2, logtime)
-                        '''
-                        x1=np.zeros_like(logtime)
-                        x1[:16]=logtime[:16]-p1[4];x1[16:-16]=logtime[16:-16];x1[-16:]=logtime[-16:]-p1[5]
-                        plt.scatter(x=x1,y=predy,label=name[:-3]+'fit',marker='*')
-                        plt.scatter(x=x1,y=logg1,label=name[:-3]+'origin',marker='^')
-                        plt.legend()
-                        plt.show()
-                        #   结果顺序：alpha, beta, gamma, delta, a5, a25
-                        '''
-        # 输出
-                        r0=np.concatenate([logg1,predy1,logg2,predy2],axis=1)
-        # r0=np.concatenate([p1,p2,logG1,logG2,G,Delta,GR],axis=0)
-                        print("真实值和预测值拟合效果对比\n{}\n".format(r0))
+        df1=pd.DataFrame(data=arr,columns=['name','p1','prec1','p2','prec2','logG1','logG2','G','Delta','GR'])
+        df1.to_excel('/Users/jasonchan/Desktop/GRres.xlsx',sheet_name='res',index=False )
 
-        # r00=np.array(r00)
-        # df1=pd.DataFrame(data=r00,columns=['name','p1','p2','prec1','prec2','logG1','logG2','G','Delta','GR'])
-        # df1.to_excel('D:\Desktop\研一\课题组\原始数据\GRres.xlsx',sheet_name='res',index=False )
-        # return r0
-
-    #
-
-
-path='/Users/jasonchan/Desktop/process'
-res=cal(path).GR()
-print(res)
+if __name__ == "__main__":
+    path='/Users/jasonchan/Desktop/process'
+    res=cal(path).GR()
+    print(res)
